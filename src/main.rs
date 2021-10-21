@@ -4,6 +4,8 @@ use std::{thread, time::Duration};
 use std::collections::LinkedList;
 use std::sync::{Mutex, Arc};
 
+use lazy_static::lazy_static;
+
 mod linecodec;
 mod server;
 // mod client;
@@ -15,6 +17,10 @@ use crate::server::Server;
 // There are two types of sockets: Active and passive sockets. Active sockets are the ones which
 // have a peer connected at the other end and data can be sent and received at this socket. Passive
 // socket can just listen to connection requests - it can never talk to clients, send/receive data.
+
+lazy_static! {
+    static ref KNOWN_HOSTS: Mutex<LinkedList<IpAddr>> = Mutex::new(LinkedList::new());
+}
 
 /// Given a TcpStream:
 /// - Deserialize the message
@@ -46,14 +52,14 @@ fn handle_client(stream: TcpStream) {
     codec.send_message(&message).unwrap();
 }
 
-fn server_functionality(known_hosts: &mut LinkedList<IpAddr>) -> () {
+fn server_functionality() -> () {
     let server: Server = Server::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
     for stream in server.listener.incoming() {
         match stream {
             Ok(stream) => {
                 println!("\tNew connection from: {}", stream.peer_addr().unwrap());
-                if !known_hosts.contains(&stream.peer_addr().unwrap().ip()) {
-                    known_hosts.push_back(stream.peer_addr().unwrap().ip());
+                if !KNOWN_HOSTS.lock().unwrap().contains(&stream.peer_addr().unwrap().ip()) {
+                    KNOWN_HOSTS.lock().unwrap().push_back(stream.peer_addr().unwrap().ip());
                 }
                 handle_client(stream);
             }
@@ -115,14 +121,11 @@ fn client_functionality(request: &str) {
 
 fn main() {
     let entrypoint = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-    let mut known_hosts: LinkedList<IpAddr> = LinkedList::new();
-    // let known_hosts_mutex = Arc::new(Mutex::new(known_hosts));
-    // known_hosts.push_back(entrypoint);
-    // let known_hosts_x = Arc::clone(&known_hosts_mutex);
+
     thread::spawn(|| {
-        // let mut jhgjgf = known_hosts_x.lock().unwrap();
-        server_functionality(&mut known_hosts);
+        server_functionality();
     });
+
     thread::sleep(Duration::from_secs(2));
     println!("Send a message:");
 
@@ -133,9 +136,9 @@ fn main() {
         .ok()
         .expect("Couldn't read line");
 
-    // println!("hello {}", input);
-    // let known_hosts_y = Arc::clone(&known_hosts_mutex);
     client_functionality(&input);
+
+    println!("The number of known hosts is: {}", KNOWN_HOSTS.lock().unwrap().len());
 
     println!("Terminated.");
 }
@@ -144,3 +147,7 @@ fn main() {
 // The problem is known_host is owned by the main thread, it is then borrowed by the thread running
 // the server functionality of the peer. The compiler doesn't know how long the server_functionality()
 // function takes to run and thinks that the main thread may get rid of known_hosts while the server thread is still using it.
+
+// We are using a static mutable variable to store the known hosts, this is safe because both
+// threads (client and server) run infinte loops hence "closure may outlive the current function"
+// is not an issue error. This is a good discussion and solution: https://stackoverflow.com/questions/27791532/how-do-i-create-a-global-mutable-singleton
