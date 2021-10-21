@@ -1,6 +1,8 @@
 use std::io::{stdin};
 use std::net::{IpAddr, Ipv4Addr, TcpStream};
 use std::{thread, time::Duration};
+use std::collections::LinkedList;
+use std::sync::{Mutex, Arc};
 
 mod linecodec;
 mod server;
@@ -41,15 +43,18 @@ fn handle_client(stream: TcpStream) {
         .unwrap();
 
     // And use the codec to return it
-    codec.send_message(&message);
+    codec.send_message(&message).unwrap();
 }
 
-fn server_functionality() -> () {
+fn server_functionality(known_hosts: &mut LinkedList<IpAddr>) -> () {
     let server: Server = Server::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
     for stream in server.listener.incoming() {
         match stream {
             Ok(stream) => {
-                // println!("New connection: {}", stream.peer_addr().unwrap());
+                println!("\tNew connection from: {}", stream.peer_addr().unwrap());
+                if !known_hosts.contains(&stream.peer_addr().unwrap().ip()) {
+                    known_hosts.push_back(stream.peer_addr().unwrap().ip());
+                }
                 handle_client(stream);
             }
             Err(e) => {
@@ -69,7 +74,7 @@ fn client_functionality(request: &str) {
     let mut codec = LineCodec::new(stream).unwrap();
 
     // Serializing & Sending is now just one line
-    codec.send_message(&request);
+    codec.send_message(&request).unwrap();
 
     // And same with receiving the response!
     println!("{}", codec.read_message().unwrap());
@@ -109,11 +114,17 @@ fn client_functionality(request: &str) {
 }
 
 fn main() {
+    let entrypoint = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    let mut known_hosts: LinkedList<IpAddr> = LinkedList::new();
+    // let known_hosts_mutex = Arc::new(Mutex::new(known_hosts));
+    // known_hosts.push_back(entrypoint);
+    // let known_hosts_x = Arc::clone(&known_hosts_mutex);
     thread::spawn(|| {
-        server_functionality();
+        // let mut jhgjgf = known_hosts_x.lock().unwrap();
+        server_functionality(&mut known_hosts);
     });
     thread::sleep(Duration::from_secs(2));
-    println!("Please input some text:");
+    println!("Send a message:");
 
     let mut input = String::new();
 
@@ -122,9 +133,14 @@ fn main() {
         .ok()
         .expect("Couldn't read line");
 
-    println!("hello {}", input);
-
+    // println!("hello {}", input);
+    // let known_hosts_y = Arc::clone(&known_hosts_mutex);
     client_functionality(&input);
 
     println!("Terminated.");
 }
+
+
+// The problem is known_host is owned by the main thread, it is then borrowed by the thread running
+// the server functionality of the peer. The compiler doesn't know how long the server_functionality()
+// function takes to run and thinks that the main thread may get rid of known_hosts while the server thread is still using it.
