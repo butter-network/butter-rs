@@ -5,14 +5,10 @@ use std::sync::{Mutex};
 
 use lazy_static::lazy_static;
 
-mod line_codec;
-mod server;
-mod threadpool;
-// mod client;
-
-use crate::line_codec::LineCodec;
-use crate::server::Server;
+use butter::line_codec::LineCodec;
+use butter::server::Server;
 // use crate::client::Client;
+use butter::threadpool::ThreadPool;
 
 // There are two types of sockets: Active and passive sockets. Active sockets are the ones which
 // have a peer connected at the other end and data can be sent and received at this socket. Passive
@@ -54,22 +50,17 @@ fn handle_client(stream: TcpStream) {
 
 fn server_functionality() -> () {
     let server: Server = Server::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
-    // let pool = ThreadPool::new(4);
+    let pool = ThreadPool::new(4);
     for stream in server.listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                let peer_address = stream.peer_addr().unwrap().ip();
-                println!("\tNew connection from: {}", peer_address);
-                handle_client(stream);
-                if !KNOWN_HOSTS.lock().unwrap().contains(&peer_address) {
-                    KNOWN_HOSTS.lock().unwrap().push(peer_address);
-                };
+        let stream = stream.unwrap();
+        pool.execute(|| {
+            let peer_address = stream.peer_addr().unwrap().ip();
+            println!("\tNew connection from: {}", peer_address);
+            handle_client(stream);
+            if !KNOWN_HOSTS.lock().unwrap().contains(&peer_address) {
+                KNOWN_HOSTS.lock().unwrap().push(peer_address);
             }
-            Err(e) => {
-                println!("Error: {}", e);
-                /* connection failed */
-            }
-        }
+        });
     }
 }
 
