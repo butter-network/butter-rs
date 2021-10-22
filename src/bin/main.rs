@@ -131,17 +131,20 @@ fn main() {
     });
 
     thread::sleep(Duration::from_secs(2));
-    println!("Send a message:");
 
-    let mut input = String::new();
+    loop {
+        println!("Send a message:");
 
-    stdin()
-        .read_line(&mut input)
-        .ok()
-        .expect("Couldn't read line");
+        let mut input = String::new();
 
-    client_functionality(&input);
+        stdin()
+            .read_line(&mut input)
+            .ok()
+            .expect("Couldn't read line");
 
+        client_functionality(&input);
+
+    }
     println!("Terminated.");
 }
 
