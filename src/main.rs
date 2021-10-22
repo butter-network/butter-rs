@@ -1,8 +1,7 @@
 use std::io::{stdin};
 use std::net::{IpAddr, Ipv4Addr, TcpStream};
 use std::{thread, time::Duration};
-use std::collections::LinkedList;
-use std::sync::{Mutex, Arc};
+use std::sync::{Mutex};
 
 use lazy_static::lazy_static;
 
@@ -19,7 +18,7 @@ use crate::server::Server;
 // socket can just listen to connection requests - it can never talk to clients, send/receive data.
 
 lazy_static! {
-    static ref KNOWN_HOSTS: Mutex<LinkedList<IpAddr>> = Mutex::new(LinkedList::new());
+    static ref KNOWN_HOSTS: Mutex<Vec<IpAddr>> = Mutex::new(Vec::new());
 }
 
 /// Given a TcpStream:
@@ -57,11 +56,12 @@ fn server_functionality() -> () {
     for stream in server.listener.incoming() {
         match stream {
             Ok(stream) => {
-                println!("\tNew connection from: {}", stream.peer_addr().unwrap());
-                if !KNOWN_HOSTS.lock().unwrap().contains(&stream.peer_addr().unwrap().ip()) {
-                    KNOWN_HOSTS.lock().unwrap().push_back(stream.peer_addr().unwrap().ip());
-                }
+                let peer_address = stream.peer_addr().unwrap().ip();
+                println!("\tNew connection from: {}", peer_address);
                 handle_client(stream);
+                if !KNOWN_HOSTS.lock().unwrap().contains(&peer_address) {
+                    KNOWN_HOSTS.lock().unwrap().push(peer_address);
+                };
             }
             Err(e) => {
                 println!("Error: {}", e);
@@ -71,19 +71,28 @@ fn server_functionality() -> () {
     }
 }
 
+
+// obviously can't work given that a new connection can't be formed
 fn client_functionality(request: &str) {
+    for i in KNOWN_HOSTS.lock().unwrap().iter() {
+        let address = i.to_string()+":8376";
+        let stream = TcpStream::connect(address).unwrap();
+        let mut codec = LineCodec::new(stream).unwrap();
+        codec.send_message(&request).unwrap();
+        println!("{}", codec.read_message().unwrap());
+    }
     // Establish a TCP connection with the farend
-    let stream = TcpStream::connect("127.0.0.1:8376").unwrap();
+    // let stream = TcpStream::connect("127.0.0.1:8376").unwrap();
 
     // Codec is our interface for reading/writing messages.
     // No need to handle reading/writing directly
-    let mut codec = LineCodec::new(stream).unwrap();
+    // let mut codec = LineCodec::new(stream).unwrap();
 
     // Serializing & Sending is now just one line
-    codec.send_message(&request).unwrap();
+    // codec.send_message(&request).unwrap();
 
     // And same with receiving the response!
-    println!("{}", codec.read_message().unwrap());
+    // println!("{}", codec.read_message().unwrap());
     // Ok(())
 
     // TODO: Look at using the stream.shutdown() method...
@@ -122,6 +131,8 @@ fn client_functionality(request: &str) {
 fn main() {
     let entrypoint = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 
+    KNOWN_HOSTS.lock().unwrap().push(entrypoint);
+
     thread::spawn(|| {
         server_functionality();
     });
@@ -138,8 +149,6 @@ fn main() {
 
     client_functionality(&input);
 
-    println!("The number of known hosts is: {}", KNOWN_HOSTS.lock().unwrap().len());
-
     println!("Terminated.");
 }
 
@@ -149,5 +158,5 @@ fn main() {
 // function takes to run and thinks that the main thread may get rid of known_hosts while the server thread is still using it.
 
 // We are using a static mutable variable to store the known hosts, this is safe because both
-// threads (client and server) run infinte loops hence "closure may outlive the current function"
+// threads (client and server) run infinite loops hence "closure may outlive the current function"
 // is not an issue error. This is a good discussion and solution: https://stackoverflow.com/questions/27791532/how-do-i-create-a-global-mutable-singleton
