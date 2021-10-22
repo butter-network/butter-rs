@@ -5,11 +5,12 @@ use std::sync::{Mutex};
 
 use lazy_static::lazy_static;
 
-mod linecodec;
+mod line_codec;
 mod server;
+mod threadpool;
 // mod client;
 
-use crate::linecodec::LineCodec;
+use crate::line_codec::LineCodec;
 use crate::server::Server;
 // use crate::client::Client;
 
@@ -53,6 +54,7 @@ fn handle_client(stream: TcpStream) {
 
 fn server_functionality() -> () {
     let server: Server = Server::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
+    // let pool = ThreadPool::new(4);
     for stream in server.listener.incoming() {
         match stream {
             Ok(stream) => {
@@ -81,7 +83,7 @@ fn client_functionality(request: &str) {
         codec.send_message(&request).unwrap();
         println!("{}", codec.read_message().unwrap());
     }
-    // Establish a TCP connection with the farend
+    // Establish a TCP connection
     // let stream = TcpStream::connect("127.0.0.1:8376").unwrap();
 
     // Codec is our interface for reading/writing messages.
