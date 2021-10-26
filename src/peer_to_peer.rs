@@ -15,7 +15,7 @@ lazy_static! {
 
 pub struct PeerToPeer {
     // server: Server,
-    // known_hosts: KNOWN_HOSTS,
+    // known_hosts: Mutex<Vec<IpAddr>>,
     ip_address: IpAddr,
     port: u16,
 }
@@ -30,34 +30,29 @@ impl PeerToPeer {
 
         thread::spawn(move || {
             let server: Server = Server::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
-            // let pool = ThreadPool::new(4);
+            let pool = ThreadPool::new(4);
             for stream in server.listener.incoming() {
                 let stream = stream.unwrap();
-                // pool.execute(|| {
-                //     let peer_address = stream.peer_addr().unwrap().ip();
-                //     println!("\tNew connection from: {}", peer_address);
-                //     server_behaviour(stream);
-                //     if !KNOWN_HOSTS.lock().unwrap().contains(&peer_address) {
-                //         KNOWN_HOSTS.lock().unwrap().push(peer_address);
-                //     }
-                // });
-                let peer_address = stream.peer_addr().unwrap().ip();
-                println!("\tNew connection from: {}", peer_address);
-                server_behaviour(stream);
-                if !KNOWN_HOSTS.lock().unwrap().contains(&peer_address) {
-                    KNOWN_HOSTS.lock().unwrap().push(peer_address);
-                }
+                pool.execute(move || {
+                    let peer_address = stream.peer_addr().unwrap().ip();
+                    println!("\tNew connection from: {}", peer_address);
+                    server_behaviour(stream);
+                    if !KNOWN_HOSTS.lock().unwrap().contains(&peer_address) {
+                        KNOWN_HOSTS.lock().unwrap().push(peer_address);
+                    }
+                });
             }
         });
 
-        // Allow the server to startup - what about just putting the server on the main thread?
+        // Allow the server to startup before client tries to connect
         thread::sleep(Duration::from_secs(2));
 
         client_behaviour();
 
         PeerToPeer {
+            // known_hosts: *KNOWN_HOSTS,
             ip_address,
-            port
+            port,
         }
     }
 }

@@ -61,12 +61,3 @@ fn main() {
     let p2p: PeerToPeer = PeerToPeer::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                                           8376, server_behaviour, client_behaviour);
 }
-
-
-// The problem is known_host is owned by the main thread, it is then borrowed by the thread running
-// the server functionality of the peer. The compiler doesn't know how long the server_functionality()
-// function takes to run and thinks that the main thread may get rid of known_hosts while the server thread is still using it.
-
-// We are using a static mutable variable to store the known hosts, this is safe because both
-// threads (client and server) run infinite loops hence "closure may outlive the current function"
-// is not an issue error. This is a good discussion and solution: https://stackoverflow.com/questions/27791532/how-do-i-create-a-global-mutable-singleton
