@@ -5,7 +5,6 @@ use crate::server::Server;
 use crate::threadpool::ThreadPool;
 
 use lazy_static::lazy_static;
-// use crate::line_codec::LineCodec;
 
 use std::sync::{mpsc, Mutex};
 
@@ -14,8 +13,6 @@ lazy_static! {
 }
 
 pub struct PeerToPeer {
-    // server: Server,
-    // known_hosts: Mutex<Vec<IpAddr>>,
     ip_address: IpAddr,
     port: u16,
 }
@@ -35,21 +32,14 @@ impl PeerToPeer {
 
             for stream in server.listener.incoming() {
                 let stream = stream.unwrap();
-                // pool.execute(move || {
-                //     let peer_address = stream.peer_addr().unwrap().ip();
-                //     println!("\tNew connection from: {}", peer_address);
-                //     server_behaviour(stream);
-                //     if !known_hosts.lock().unwrap().contains(&peer_address) {
-                //         known_hosts.lock().unwrap().push(peer_address);
-                //         tx2.send(known_hosts).unwrap();
-                //     }
-                // });
-                let peer_address = stream.peer_addr().unwrap().ip();
-                println!("\tNew connection from: {}", peer_address);
-                server_behaviour(stream);
-                if !KNOWN_HOSTS.lock().unwrap().contains(&peer_address) {
-                    KNOWN_HOSTS.lock().unwrap().push(peer_address);
-                }
+                pool.execute(move || {
+                    let peer_address = stream.peer_addr().unwrap().ip();
+                    println!("\tNew connection from: {}", peer_address);
+                    server_behaviour(stream);
+                    if !KNOWN_HOSTS.lock().unwrap().contains(&peer_address) {
+                        KNOWN_HOSTS.lock().unwrap().push(peer_address);
+                    }
+                });
             }
         });
 
@@ -59,7 +49,6 @@ impl PeerToPeer {
         client_behaviour(&KNOWN_HOSTS);
 
         PeerToPeer {
-            // known_hosts: *KNOWN_HOSTS,
             ip_address,
             port,
         }
