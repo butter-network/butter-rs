@@ -32,7 +32,7 @@ fn server_behaviour(stream: TcpStream) {
     codec.send_message(&message).unwrap();
 }
 
-fn client_behaviour() {
+fn client_behaviour(known_hosts: &Mutex<Vec<IpAddr>>) {
     loop {
         println!("Send a message:");
 
@@ -43,17 +43,19 @@ fn client_behaviour() {
             .ok()
             .expect("Couldn't read line");
 
-        // for i in KNOWN_HOSTS.lock().unwrap().iter() {
-        //     let address = i.to_string() + ":8376";
-        //     let stream = TcpStream::connect(address).unwrap();
-        //     let mut codec = LineCodec::new(stream).unwrap();
-        //     codec.send_message(&request).unwrap();
-        //     println!("{}", codec.read_message().unwrap());
-        // }
-        let stream = TcpStream::connect("127.0.0.1:8376").unwrap();
-        let mut codec = LineCodec::new(stream).unwrap();
-        codec.send_message(&input).unwrap();
-        println!("{}", codec.read_message().unwrap());
+        // println!("{}", known_hosts.lock().unwrap().len());
+
+        for i in known_hosts.lock().unwrap().iter() {
+            let address = i.to_string() + ":8376";
+            let stream = TcpStream::connect(address).unwrap();
+            let mut codec = LineCodec::new(stream).unwrap();
+            codec.send_message(&input).unwrap();
+            println!("{}", codec.read_message().unwrap());
+        }
+        // let stream = TcpStream::connect("127.0.0.1:8376").unwrap();
+        // let mut codec = LineCodec::new(stream).unwrap();
+        // codec.send_message(&input).unwrap();
+        // println!("{}", codec.read_message().unwrap());
     }
 }
 
