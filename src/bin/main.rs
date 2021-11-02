@@ -1,13 +1,8 @@
 use std::io::{stdin};
 use std::net::{IpAddr, Ipv4Addr, TcpStream};
-use std::{thread, time::Duration};
 use std::sync::{Mutex};
 
-use lazy_static::lazy_static;
-
 use butter::line_codec::LineCodec;
-use butter::server::Server;
-use butter::threadpool::ThreadPool;
 use butter::peer_to_peer::PeerToPeer;
 
 // TODO: Look at next videos (object + blockchain videos)
