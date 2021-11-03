@@ -8,19 +8,18 @@ use butter::peer_to_peer::PeerToPeer;
 // TODO: Look at next videos (object + blockchain videos)
 // TODO: Test using local machine and docker container with their respective IP addressed (not the loopback address)
 
-fn server_behaviour(message: String) -> String {
-    // let mut codec = LineCodec::new(stream).unwrap();
+fn server_behaviour(stream: TcpStream) -> () {
+    let mut codec = LineCodec::new(stream).unwrap();
 
     // Read & reverse the received message
-    // let message: String = codec
-    //     .read_message()
-    //     // Reverse message
-    //     .map(|m| m.chars().rev().collect())
-    //     .unwrap();
-    //
-    // // And use the codec to return it
-    // codec.send_message(&message).unwrap();
-    message.map(|m| m.chars().rev().collect()).unwrap()
+    let message: String = codec
+        .read_message()
+        // Reverse message
+        .map(|m| m.chars().rev().collect())
+        .unwrap();
+
+    // And use the codec to return it
+    codec.send_message(&message).unwrap();
 }
 
 fn client_behaviour(known_hosts: &Mutex<Vec<IpAddr>>) {

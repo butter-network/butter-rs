@@ -14,11 +14,10 @@ lazy_static! {
     static ref KNOWN_HOSTS: Mutex<Vec<IpAddr>> = Mutex::new(Vec::new());
 }
 
-fn get_known_hosts(message: String) -> String {
-    // let mut codec = LineCodec::new(stream).unwrap();
+fn get_known_hosts(stream: TcpStream) -> () {
+    let mut codec = LineCodec::new(stream).unwrap();
     // And use the codec to return it
-    // codec.send_message("this is the list of known hosts").unwrap();
-    "This is a list of known hosts".to_string()
+    codec.send_message("this is the list of known hosts").unwrap();
 }
 
 
@@ -29,7 +28,7 @@ pub struct PeerToPeer {
 }
 
 impl PeerToPeer {
-    pub fn new(ip_address: IpAddr, port: u16, server_behaviour: fn(String) -> (String),
+    pub fn new(ip_address: IpAddr, port: u16, server_behaviour: fn(TcpStream) -> (),
                client_behaviour: fn(&Mutex<Vec<IpAddr>>) -> ()) -> PeerToPeer {
 
         // known_hosts - add itself?
@@ -55,7 +54,8 @@ impl PeerToPeer {
             pool.execute(move || {
                 let peer_address = stream.peer_addr().unwrap().ip();
                 println!("\tNew connection from: {}", peer_address);
-                self.handler(stream); //TODO: This needs to be made dynamic, depending on the route (means I also need to define some sort of stream request format)
+                // handler(stream); //TODO: This needs to be made dynamic, depending on the route (means I also need to define some sort of stream request format)
+                server_behaviour(stream);
                 if !KNOWN_HOSTS.lock().unwrap().contains(&peer_address) {
                     KNOWN_HOSTS.lock().unwrap().push(peer_address);
                 }
@@ -123,7 +123,7 @@ impl PeerToPeer {
         let uri = message.split_whitespace().nth(1).unwrap();
 
         // call the appropriate behaviour and pass remaining part of message based on the uri
-        self.server.routes.get(uri).unwrap()(stream);
+        // self.server.routes.get(uri).unwrap()(stream);
 
     }
 }

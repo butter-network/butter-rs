@@ -7,7 +7,7 @@ use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 
 pub struct Server {
     pub listener: TcpListener,
-    pub routes: HashMap<String, fn(String) -> String>,
+    pub routes: HashMap<String, fn(TcpStream) -> ()>,
 }
 
 impl Server {
@@ -15,14 +15,14 @@ impl Server {
         let socket_address = SocketAddr::new(ip_address, port);
         let listener = TcpListener::bind(socket_address).unwrap();
 
-        let routes: HashMap<String, fn(String) -> String> = HashMap::new();
+        let routes: HashMap<String, fn(TcpStream) -> ()> = HashMap::new();
 
         println!("Server is listening...");
 
         Server { listener, routes }
     }
 
-    pub fn register_routes(&mut self, path: String, route_behaviour: fn(String) -> String) {
+    pub fn register_routes(&mut self, path: String, route_behaviour: fn(TcpStream) -> ()) {
         self.routes.insert(path, route_behaviour);
     }
 }
