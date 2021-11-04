@@ -5,71 +5,100 @@ use rand::Rng;
 use crate::server::Server;
 use crate::threadpool::ThreadPool;
 
-use lazy_static::lazy_static;
-
-use std::sync::{Mutex};
+use std::sync::{Arc, Mutex};
 use crate::line_codec::LineCodec;
 
-lazy_static! {
-    static ref KNOWN_HOSTS: Mutex<Vec<IpAddr>> = Mutex::new(Vec::new());
-}
 
-fn get_known_hosts(stream: TcpStream) -> () {
-    let mut codec = LineCodec::new(stream).unwrap();
+pub fn get_known_hosts() -> String {
+    // let mut codec = LineCodec::new(stream).unwrap();
     // And use the codec to return it
-    codec.send_message("this is the list of known hosts").unwrap();
+    let mut message = String::new();
+    message.push_str("Known hosts:\n");
+    // let mut known_hosts = known_hosts.lock().unwrap().len(); //never getting the lock :(
+    // println!("{}", known_hosts.len());
+    // for host in known_hosts.iter() {
+    //     message.push_str(&format!("{}\n", host));
+    // }
+    // for i in 0..known_hosts.len() {
+    //     message.push_str(known_hosts.lock().unwrap().get(i).unwrap().to_string().as_str());
+    //     message.push_str(",");
+    // }
+    // codec.send_message(message.as_str()).unwrap();
+    // message = "hello, i'm the server".to_string();
+    message
 }
-
 
 pub struct PeerToPeer {
     ip_address: IpAddr,
     port: u16,
     server: Server,
+    server_behaviour: fn(TcpStream) -> (),
+    client_behaviour: fn(Arc<Mutex<Vec<IpAddr>>>) -> (),
+    known_hosts: Arc<Mutex<Vec<IpAddr>>>,
 }
 
 impl PeerToPeer {
     pub fn new(ip_address: IpAddr, port: u16, server_behaviour: fn(TcpStream) -> (),
-               client_behaviour: fn(&Mutex<Vec<IpAddr>>) -> ()) -> PeerToPeer {
+               client_behaviour: fn(Arc<Mutex<Vec<IpAddr>>>) -> ()) -> PeerToPeer {
 
         // known_hosts - add itself?
         let entrypoint = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-        KNOWN_HOSTS.lock().unwrap().push(entrypoint);
-        
-        thread::spawn(move || {
-            // Allow the server to startup before client tries to connect
-            thread::sleep(Duration::from_secs(2));
-            client_behaviour(&KNOWN_HOSTS);
-        });
+        // known_hosts.lock().unwrap().push(entrypoint);
+
+        let mut known_hosts = Arc::new(Mutex::new(Vec::new()));
+        known_hosts.lock().unwrap().push(entrypoint);
 
         let mut server: Server = Server::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
 
-        let pool = ThreadPool::new(4);
+        // server.register_routes("/".parse().unwrap(), server_behaviour);
+        // server.register_routes("/get_known_hosts".parse().unwrap(), get_known_hosts);
 
-        server.register_routes("/".parse().unwrap(), server_behaviour);
-        server.register_routes("/get_known_hosts".parse().unwrap(), get_known_hosts);
-        
-        // This is an infinite loop
-        for stream in server.listener.incoming() {
-            let stream = stream.unwrap();
-            pool.execute(move || {
-                let peer_address = stream.peer_addr().unwrap().ip();
-                println!("\tNew connection from: {}", peer_address);
-                // handler(stream); //TODO: This needs to be made dynamic, depending on the route (means I also need to define some sort of stream request format)
-                server_behaviour(stream);
-                if !KNOWN_HOSTS.lock().unwrap().contains(&peer_address) {
-                    KNOWN_HOSTS.lock().unwrap().push(peer_address);
-                }
-            });
-        }
+        // makes sense for this to be static as it will exist for the entire runtime of the program and needs to be accessed by several threads all of which run in infinte loops
+        // this prevents having to copy the whole object between each thread (moving ownsership of a version of the ovbject constantly)
 
         PeerToPeer {
             ip_address,
             port,
             server,
+            server_behaviour,
+            client_behaviour,
+            known_hosts,
         }
     }
 
-    // fn run()
+    pub fn start(self) {
+        let pool = ThreadPool::new(4);
+
+        // i don't need to move entire self into the thread scope - I just need to move the client server
+        // now client behaviour owns self.client behaviour - right?
+        // this is why rust is good! I create the object and then move exactly what I need where I need it by changing the ownership - this frees the memory previously held by the object
+        let client_behaviour = self.client_behaviour;
+        let server_behaviour = self.server_behaviour;
+        let known_hosts = self.known_hosts;
+        let known_hosts_client = Arc::clone(&known_hosts);
+
+        // Client thread, running client behaviour
+        thread::spawn(move || {
+            // Allow the server to startup before client tries to connect
+            thread::sleep(Duration::from_secs(2));
+            (client_behaviour)(known_hosts_client);
+        });
+
+        // Server runs on main thread and handles connections in a threadpool
+        for stream in self.server.listener.incoming() {
+            let stream = stream.unwrap();
+            let known_hosts_server = Arc::clone(&known_hosts);
+            pool.execute(move || {
+                let peer_address = stream.peer_addr().unwrap().ip();
+                println!("\tNew connection from: {}", peer_address);
+                // handler(stream); //TODO: This needs to be made dynamic, depending on the route (means I also need to define some sort of stream request format)
+                (server_behaviour)(stream);
+                if !known_hosts_server.lock().unwrap().contains(&peer_address) {
+                    known_hosts_server.lock().unwrap().push(peer_address);
+                }
+            });
+        }
+    }
 
     // Upon initialising the peer, introduce yourself to the network to avoid cold start problem
     fn introduce_yourself_naive() {
@@ -90,7 +119,7 @@ impl PeerToPeer {
                     codec.send_message("/known_host").unwrap();
                     println!("{}", codec.read_message().unwrap());
                     break;
-                },
+                }
                 Err(_) => {
                     // do nothing and loop
                 }
@@ -109,7 +138,7 @@ impl PeerToPeer {
     }
 
     pub fn register_server_route(&mut self, route: String, behaviour: fn(TcpStream) -> ()) {
-       self.server.register_routes(route, behaviour);
+        self.server.register_routes(route, behaviour);
     }
 
     fn handler(&mut self, stream: TcpStream) {
@@ -124,6 +153,5 @@ impl PeerToPeer {
 
         // call the appropriate behaviour and pass remaining part of message based on the uri
         // self.server.routes.get(uri).unwrap()(stream);
-
     }
 }
