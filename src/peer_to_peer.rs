@@ -2,7 +2,7 @@ use std::net::{IpAddr, Ipv4Addr, TcpStream, UdpSocket};
 use std::thread;
 use std::time::Duration;
 use rand::Rng;
-use crate::server::Server;
+use crate::server::TCPServer;
 use crate::threadpool::ThreadPool;
 
 use std::sync::{Arc, Mutex};
@@ -12,7 +12,7 @@ use crate::line_codec::LineCodec;
 pub struct PeerToPeer {
     ip_address: IpAddr,
     port: u16,
-    server: Server,
+    server: TCPServer,
     server_behaviour: fn(TcpStream) -> (),
     client_behaviour: fn(Arc<Mutex<Vec<IpAddr>>>) -> (),
     known_hosts: Arc<Mutex<Vec<IpAddr>>>,
@@ -29,7 +29,7 @@ impl PeerToPeer {
         let known_hosts = Arc::new(Mutex::new(Vec::new()));
         known_hosts.lock().unwrap().push(entrypoint);
 
-        let server: Server = Server::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
+        let server: TCPServer = TCPServer::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
 
         // server.register_routes("/".parse().unwrap(), server_behaviour);
         // server.register_routes("/get_known_hosts".parse().unwrap(), get_known_hosts);
@@ -136,9 +136,9 @@ impl PeerToPeer {
         // self.server.routes.get(uri).unwrap()(stream);
     }
 
-    pub fn get_known_hosts(self) -> String {
+    pub fn stringify_known_hosts(known_hosts: Arc<Mutex<Vec<IpAddr>>>) -> String {
         let mut message = String::new();
-        for host in self.known_hosts.lock().unwrap().iter() {
+        for host in known_hosts.lock().unwrap().iter() {
             message.push_str(host.to_string().as_str());
             message.push_str(",");
         }

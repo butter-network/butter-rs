@@ -1,16 +1,16 @@
 use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
+use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket};
 
 // The Server struct is used as the basis for nodes that need to operate as servers.
 // Generically, the server connects to the network and listens on a given port.
 
-pub struct Server {
+pub struct TCPServer {
     pub listener: TcpListener,
     pub routes: HashMap<String, fn(TcpStream) -> ()>,
 }
 
-impl Server {
-    pub fn new(ip_address: IpAddr, port: u16) -> Server {
+impl TCPServer {
+    pub fn new(ip_address: IpAddr, port: u16) -> TCPServer {
         let socket_address = SocketAddr::new(ip_address, port);
         let listener = TcpListener::bind(socket_address).unwrap();
 
@@ -18,10 +18,14 @@ impl Server {
 
         println!("Server is listening...");
 
-        Server { listener, routes }
+        TCPServer { listener, routes }
     }
 
     pub fn register_routes(&mut self, path: String, route_behaviour: fn(TcpStream) -> ()) {
         self.routes.insert(path, route_behaviour);
     }
+}
+
+pub struct UDPServer {
+    pub socket: UdpSocket,
 }
