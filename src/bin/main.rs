@@ -16,9 +16,9 @@ fn server_behaviour(stream: TcpStream) -> () {
 
     let mut answer = String::new();
     if message.eq("/known_hosts") {
-        answer = peer_to_peer::get_known_hosts();
+        // answer = peer_to_peer::get_known_hosts();
     } else {
-        answer = message;
+        answer = message.chars().rev().collect();
     }
 
     // Read & reverse the received message
@@ -53,5 +53,4 @@ fn main() {
     let p2p: PeerToPeer = PeerToPeer::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                                           8376, server_behaviour, client_behaviour);
     p2p.start();
-    // PeerToPeer.start()
 }

@@ -9,25 +9,6 @@ use std::sync::{Arc, Mutex};
 use crate::line_codec::LineCodec;
 
 
-pub fn get_known_hosts() -> String {
-    // let mut codec = LineCodec::new(stream).unwrap();
-    // And use the codec to return it
-    let mut message = String::new();
-    message.push_str("Known hosts:\n");
-    // let mut known_hosts = known_hosts.lock().unwrap().len(); //never getting the lock :(
-    // println!("{}", known_hosts.len());
-    // for host in known_hosts.iter() {
-    //     message.push_str(&format!("{}\n", host));
-    // }
-    // for i in 0..known_hosts.len() {
-    //     message.push_str(known_hosts.lock().unwrap().get(i).unwrap().to_string().as_str());
-    //     message.push_str(",");
-    // }
-    // codec.send_message(message.as_str()).unwrap();
-    // message = "hello, i'm the server".to_string();
-    message
-}
-
 pub struct PeerToPeer {
     ip_address: IpAddr,
     port: u16,
@@ -45,10 +26,10 @@ impl PeerToPeer {
         let entrypoint = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         // known_hosts.lock().unwrap().push(entrypoint);
 
-        let mut known_hosts = Arc::new(Mutex::new(Vec::new()));
+        let known_hosts = Arc::new(Mutex::new(Vec::new()));
         known_hosts.lock().unwrap().push(entrypoint);
 
-        let mut server: Server = Server::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
+        let server: Server = Server::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
 
         // server.register_routes("/".parse().unwrap(), server_behaviour);
         // server.register_routes("/get_known_hosts".parse().unwrap(), get_known_hosts);
@@ -87,7 +68,7 @@ impl PeerToPeer {
         // Server runs on main thread and handles connections in a threadpool
         for stream in self.server.listener.incoming() {
             let stream = stream.unwrap();
-            let known_hosts_server = Arc::clone(&known_hosts);
+            let known_hosts_server = Arc::clone(&known_hosts); // This might cause a big overhead? Maybe make known hosts static?
             pool.execute(move || {
                 let peer_address = stream.peer_addr().unwrap().ip();
                 println!("\tNew connection from: {}", peer_address);
@@ -153,5 +134,14 @@ impl PeerToPeer {
 
         // call the appropriate behaviour and pass remaining part of message based on the uri
         // self.server.routes.get(uri).unwrap()(stream);
+    }
+
+    pub fn get_known_hosts(self) -> String {
+        let mut message = String::new();
+        for host in self.known_hosts.lock().unwrap().iter() {
+            message.push_str(host.to_string().as_str());
+            message.push_str(",");
+        }
+        message
     }
 }
