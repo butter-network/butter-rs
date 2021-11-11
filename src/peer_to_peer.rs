@@ -13,23 +13,23 @@ pub struct PeerToPeer {
     ip_address: IpAddr,
     port: u16,
     server: TCPServer,
-    server_behaviour: fn(TcpStream) -> (),
-    client_behaviour: fn(Arc<Mutex<Vec<IpAddr>>>) -> (),
-    known_hosts: Arc<Mutex<Vec<IpAddr>>>,
+    server_behaviour: fn(String) -> String,
+    client_behaviour: fn(Vec<IpAddr>) -> (),
+    known_hosts: Vec<IpAddr>,
 }
 
 impl PeerToPeer {
-    pub fn new(ip_address: IpAddr, port: u16, server_behaviour: fn(TcpStream) -> (),
-               client_behaviour: fn(Arc<Mutex<Vec<IpAddr>>>) -> ()) -> PeerToPeer {
+    pub fn new(ip_address: IpAddr, port: u16, server_behaviour: fn(String) -> String,
+               client_behaviour: fn(Vec<IpAddr>) -> ()) -> PeerToPeer {
 
         // known_hosts - add itself?
         let entrypoint = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         // known_hosts.lock().unwrap().push(entrypoint);
 
-        let known_hosts = Arc::new(Mutex::new(Vec::new()));
-        known_hosts.lock().unwrap().push(entrypoint);
+        let mut known_hosts = Vec::new();
+        known_hosts.push(entrypoint);
 
-        let server: TCPServer = TCPServer::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
+        let mut server: TCPServer = TCPServer::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
 
         // server.register_routes("/".parse().unwrap(), server_behaviour);
         // server.register_routes("/get_known_hosts".parse().unwrap(), get_known_hosts);
@@ -56,26 +56,43 @@ impl PeerToPeer {
         let client_behaviour = self.client_behaviour;
         let server_behaviour = self.server_behaviour;
         let known_hosts = self.known_hosts;
-        let known_hosts_client = Arc::clone(&known_hosts);
+        let known_hosts_server = Arc::new(Mutex::new(&known_hosts));
+        let known_hosts_client = known_hosts.clone(); // doesn't need the mutex lock as it is only being read
+        let server = self.server;
 
         // Client thread, running client behaviour
         thread::spawn(move || {
             // Allow the server to startup before client tries to connect
             thread::sleep(Duration::from_secs(2));
-            (client_behaviour)(known_hosts_client);
+            (client_behaviour)(known_hosts_client); // DON'T NEED TO THIS TO BE MUTEX PROTECTED BECAUSE IT IS ONLY EVER READ AND PASSED NON-MUTABLE VALUES
+                                                    // Solution is too not have the known hosts mutex protected in the p2p object but only protect them in the threadpool server (when writing&reading)
         });
 
+
+
         // Server runs on main thread and handles connections in a threadpool
-        for stream in self.server.listener.incoming() {
+        for stream in server.listener.incoming() {
             let stream = stream.unwrap();
-            let known_hosts_server = Arc::clone(&known_hosts); // This might cause a big overhead? Maybe make known hosts static?
             pool.execute(move || {
                 let peer_address = stream.peer_addr().unwrap().ip();
                 println!("\tNew connection from: {}", peer_address);
-                // handler(stream); //TODO: This needs to be made dynamic, depending on the route (means I also need to define some sort of stream request format)
-                (server_behaviour)(stream);
-                if !known_hosts_server.lock().unwrap().contains(&peer_address) {
-                    known_hosts_server.lock().unwrap().push(peer_address);
+                // (server_behaviour)(stream);
+                // self.handler(stream);
+                let mut codec = LineCodec::new(stream).unwrap();
+                let message = codec.read_message().unwrap();
+                if message == "/known_hosts" {
+                    // let mut kssf = String::new();
+                    println!("{}", known_hosts_server.lock().unwrap().len());
+                    // for ip in known_hosts_server.lock().unwrap().iter() {
+                    //     kssf.push_str(&format!("{}\n", ip));
+                    // }
+                    codec.send_message("testee").unwrap();
+                } else {
+                    codec.send_message((server_behaviour)(message).as_str()).unwrap();
+                }
+                let mut lock = known_hosts_server.lock().unwrap();
+                if !lock.contains(&peer_address) {
+                    lock.push(peer_address);
                 }
             });
         }
@@ -122,7 +139,7 @@ impl PeerToPeer {
         self.server.register_routes(route, behaviour);
     }
 
-    fn handler(&mut self, stream: TcpStream) {
+    fn handler(self, stream: TcpStream) {
         // Initialise the coded interface
         let mut codec = LineCodec::new(stream).unwrap();
 
@@ -131,9 +148,15 @@ impl PeerToPeer {
 
         // get the uri part of the message (which determines what we do with the rest)
         let uri = message.split_whitespace().nth(1).unwrap();
+        let content = message.split_whitespace().nth(2).unwrap();
 
         // call the appropriate behaviour and pass remaining part of message based on the uri
-        // self.server.routes.get(uri).unwrap()(stream);
+        // (self.server.routes.get(uri).unwrap())(content);
+        if uri == "/known_host" {
+            codec.send_message("hello").unwrap();
+        } else {
+            codec.send_message("404").unwrap();
+        }
     }
 
     pub fn stringify_known_hosts(known_hosts: Arc<Mutex<Vec<IpAddr>>>) -> String {
