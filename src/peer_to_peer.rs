@@ -1,8 +1,9 @@
 use std::net::{IpAddr, Ipv4Addr, TcpStream, UdpSocket};
 use std::thread;
 use std::time::Duration;
-use rand::Rng;
-use crate::server::TCPServer;
+// use rand::Rng;
+use local_ip_address::local_ip;
+use crate::server::{TCPServer};
 use crate::threadpool::ThreadPool;
 
 use std::sync::{Arc, Mutex};
@@ -19,23 +20,27 @@ pub struct PeerToPeer {
 }
 
 impl PeerToPeer {
-    pub fn new(ip_address: IpAddr, port: u16, server_behaviour: fn(String) -> String,
+    pub fn new(port: u16, server_behaviour: fn(String) -> String,
                client_behaviour: fn(Arc<Mutex<Vec<IpAddr>>>) -> ()) -> PeerToPeer {
 
+        let ip_address = local_ip().unwrap();
         // known_hosts - add itself?
-        let entrypoint = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        // let entrypoint = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         // known_hosts.lock().unwrap().push(entrypoint);
 
         let known_hosts = Arc::new(Mutex::new(Vec::new()));
-        known_hosts.lock().unwrap().push(entrypoint);
+        // known_hosts.lock().unwrap().push(entrypoint);
 
-        let server: TCPServer = TCPServer::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8376);
+        let server: TCPServer = TCPServer::new(ip_address, port);
 
         // server.register_routes("/".parse().unwrap(), server_behaviour);
         // server.register_routes("/get_known_hosts".parse().unwrap(), get_known_hosts);
 
         // makes sense for this to be static as it will exist for the entire runtime of the program and needs to be accessed by several threads all of which run in infinte loops
         // this prevents having to copy the whole object between each thread (moving ownsership of a version of the ovbject constantly)
+
+
+        println!("This is my local IP address: {:?}", ip_address);
 
         PeerToPeer {
             ip_address,
@@ -69,59 +74,57 @@ impl PeerToPeer {
         // Server runs on main thread and handles connections in a threadpool
         for stream in listener.incoming() {
             let stream = stream.unwrap();
-            // let known_hosts_server = Arc::clone(&known_hosts); // This might cause a big overhead? Maybe make known hosts static?
-            // pool.execute(move || {
-            let peer_address = stream.peer_addr().unwrap().ip();
-            println!("\tNew connection from: {}", peer_address);
-            // handler(stream); //TODO: This needs to be made dynamic, depending on the route (means I also need to define some sort of stream request format)
-            let mut codec = LineCodec::new(stream).unwrap();
-            let message = codec.read_message().unwrap();
-            let mut reply = String::new();
-            if message == "/known_hosts" {
-                // reply = String::from("Known hosts!");
-                // reply = stringify_known_hosts(known_hosts_server);
-                for host in known_hosts.try_lock().unwrap().iter() {
-                    reply.push_str(host.to_string().as_str());
-                    reply.push_str(",");
+            let known_hosts_server = Arc::clone(&known_hosts); // This might cause a big overhead? Maybe make known hosts static?
+            pool.execute(move || {
+                let peer_address = stream.peer_addr().unwrap().ip();
+                println!("\tNew connection from: {}", peer_address);
+                // handler(stream); //TODO: This needs to be made dynamic, depending on the route (means I also need to define some sort of stream request format)
+                let mut codec = LineCodec::new(stream).unwrap();
+                let message = codec.read_message().unwrap();
+                let mut reply = String::new();
+                if message == "/known_hosts" {
+                    for host in known_hosts_server.try_lock().unwrap().iter() {
+                        reply.push_str(host.to_string().as_str());
+                        reply.push_str(",");
+                    }
+                } else {
+                    reply = (server_behaviour)(message);
                 }
-            } else {
-                reply = (server_behaviour)(message);
-            }
-            codec.send_message(reply.as_str()).unwrap();
-            let mut lock = known_hosts.try_lock().unwrap();
-            if !lock.contains(&peer_address) {
-                lock.push(peer_address);
-            }
-            // });
+                codec.send_message(reply.as_str()).unwrap();
+                let mut lock = known_hosts_server.try_lock().unwrap();
+                if !lock.contains(&peer_address) {
+                    lock.push(peer_address);
+                }
+            });
         }
     }
 
     // Upon initialising the peer, introduce yourself to the network to avoid cold start problem
-    fn introduce_yourself_naive() {
-        // generate random ip address and ask for known hosts
-        // How long will it take to get a hit?
-        loop {
-            let rand_ip = IpAddr::V4(Ipv4Addr::new(rand::thread_rng().gen_range(0..255),
-                                                   rand::thread_rng().gen_range(0..255),
-                                                   rand::thread_rng().gen_range(0..255),
-                                                   rand::thread_rng().gen_range(0..255)));
-            let address = rand_ip.to_string() + ":0";
-            // try to connect to that IP address
-            let stream = TcpStream::connect(address);
-            match stream {
-                Ok(stream) => {
-                    // println!("\tConnected to: {}", address);
-                    let mut codec = LineCodec::new(stream).unwrap();
-                    codec.send_message("/known_host").unwrap();
-                    println!("{}", codec.read_message().unwrap());
-                    break;
-                }
-                Err(_) => {
-                    // do nothing and loop
-                }
-            }
-        }
-    }
+    // fn introduce_yourself_naive() {
+    //     // generate random ip address and ask for known hosts
+    //     // How long will it take to get a hit?
+    //     loop {
+    //         let rand_ip = IpAddr::V4(Ipv4Addr::new(rand::thread_rng().gen_range(0..255),
+    //                                                rand::thread_rng().gen_range(0..255),
+    //                                                rand::thread_rng().gen_range(0..255),
+    //                                                rand::thread_rng().gen_range(0..255)));
+    //         let address = rand_ip.to_string() + ":0";
+    //         // try to connect to that IP address
+    //         let stream = TcpStream::connect(address);
+    //         match stream {
+    //             Ok(stream) => {
+    //                 // println!("\tConnected to: {}", address);
+    //                 let mut codec = LineCodec::new(stream).unwrap();
+    //                 codec.send_message("/known_host").unwrap();
+    //                 println!("{}", codec.read_message().unwrap());
+    //                 break;
+    //             }
+    //             Err(_) => {
+    //                 // do nothing and loop
+    //             }
+    //         }
+    //     }
+    // }
 
     // In UDP, the client does not form a connection with the server like in TCP and instead just
     // sends a datagram. Similarly, the server need not accept a connection and just waits for
@@ -149,14 +152,5 @@ impl PeerToPeer {
 
         // call the appropriate behaviour and pass remaining part of message based on the uri
         // self.server.routes.get(uri).unwrap()(stream);
-    }
-
-    pub fn stringify_known_hosts(known_hosts: Arc<Mutex<Vec<IpAddr>>>) -> String {
-        let mut known_hosts_string = String::new();
-        for host in known_hosts.try_lock().unwrap().iter() {
-            known_hosts_string.push_str(host.to_string().as_str());
-            known_hosts_string.push_str(",");
-        }
-        known_hosts_string
     }
 }

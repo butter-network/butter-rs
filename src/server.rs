@@ -1,5 +1,8 @@
 use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket};
+use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket, Ipv4Addr};
+use std::io::Error;
+
+static MULTI_CAST_ADDR: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 1);
 
 // The Server struct is used as the basis for nodes that need to operate as servers.
 // Generically, the server connects to the network and listens on a given port.
@@ -24,8 +27,4 @@ impl TCPServer {
     pub fn register_routes(&mut self, path: String, route_behaviour: fn(TcpStream) -> ()) {
         self.routes.insert(path, route_behaviour);
     }
-}
-
-pub struct UDPServer {
-    pub socket: UdpSocket,
 }

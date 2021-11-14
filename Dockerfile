@@ -1,29 +1,27 @@
+# Rust as the base image
 FROM rust:1.49 as build
 
-# create a new empty shell project
+# 1. Create a new empty shell project
 RUN USER=root cargo new --lib butter
 WORKDIR /butter
 
-# copy over your manifests
+# 2. Copy our manifests
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 
-# this build step will cache your dependencies
+# 3. Build only the dependencies to cache them
 RUN cargo build --release
 RUN rm src/*.rs
 
-# copy your source tree
+# 4. Now that the dependency is built, copy your source code
 COPY ./src ./src
 
-# build for release
+# 5. Build for release
 RUN rm ./target/release/deps/butter*
-RUN cargo build --release
+RUN cargo install --path .
 
 # our final base
 FROM debian:buster-slim
 
 # copy the build artifact from the build stage
-COPY --from=build /butter/target/release/butter .
-
-# set the startup command to run your binary
-CMD ["./butter"]
+COPY --from=build /butter/target/release/main .

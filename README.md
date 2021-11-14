@@ -24,3 +24,8 @@ the server specifies a rout by which it will server you something
 
 ## Workflow
 We want to be testing with different IPs (at least on the local network). We can use containers to have several IPs and test the system.
+
+To open an interactive shell 
+```bash
+docker-compose run node bash
+```
