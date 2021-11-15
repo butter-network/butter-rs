@@ -29,3 +29,5 @@ To open an interactive shell
 ```bash
 docker-compose run node bash
 ```
+
+Very good resource for Kademlia implementation in rust: https://github.com/f0lg0/kademlia-dht

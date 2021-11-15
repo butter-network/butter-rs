@@ -1,4 +1,4 @@
-use std::net::{IpAddr, Ipv4Addr, TcpStream, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
 use std::thread;
 use std::time::Duration;
 // use rand::Rng;
@@ -9,19 +9,24 @@ use crate::threadpool::ThreadPool;
 use std::sync::{Arc, Mutex};
 use crate::line_codec::LineCodec;
 
+use crate::discover;
+use autodiscover_rs;
+
+
+
 
 pub struct PeerToPeer {
     ip_address: IpAddr,
     port: u16,
     server: TCPServer,
     server_behaviour: fn(String) -> String,
-    client_behaviour: fn(Arc<Mutex<Vec<IpAddr>>>) -> (),
-    known_hosts: Arc<Mutex<Vec<IpAddr>>>,
+    client_behaviour: fn(Arc<Mutex<Vec<SocketAddr>>>) -> (),
+    known_hosts: Arc<Mutex<Vec<SocketAddr>>>,
 }
 
 impl PeerToPeer {
     pub fn new(port: u16, server_behaviour: fn(String) -> String,
-               client_behaviour: fn(Arc<Mutex<Vec<IpAddr>>>) -> ()) -> PeerToPeer {
+               client_behaviour: fn(Arc<Mutex<Vec<SocketAddr>>>) -> ()) -> PeerToPeer {
 
         let ip_address = local_ip().unwrap();
         // known_hosts - add itself?
@@ -31,7 +36,7 @@ impl PeerToPeer {
         let known_hosts = Arc::new(Mutex::new(Vec::new()));
         // known_hosts.lock().unwrap().push(entrypoint);
 
-        let server: TCPServer = TCPServer::new(ip_address, port);
+        let server: TCPServer = TCPServer::new(ip_address, 0);
 
         // server.register_routes("/".parse().unwrap(), server_behaviour);
         // server.register_routes("/get_known_hosts".parse().unwrap(), get_known_hosts);
@@ -40,7 +45,7 @@ impl PeerToPeer {
         // this prevents having to copy the whole object between each thread (moving ownsership of a version of the ovbject constantly)
 
 
-        println!("This is my local IP address: {:?}", ip_address);
+        // println!("This is my local IP address: {:?}", ip_address);
 
         PeerToPeer {
             ip_address,
@@ -62,7 +67,25 @@ impl PeerToPeer {
         let server_behaviour = self.server_behaviour;
         let known_hosts = self.known_hosts;
         let known_hosts_client = Arc::clone(&known_hosts);
+        let known_hosts_discover = Arc::clone(&known_hosts);
+
         let listener = self.server.listener;
+
+        // STARTUP PROCEDURE - multicast calling out
+        // before I start the data layer of the p2p network TCP, I need to go through the start up
+        // procedure to make at least one connection to the network
+        let socket = listener.local_addr().unwrap();
+        thread::spawn(move || {
+            // this function blocks forever; running it a seperate thread
+            // autodiscover_rs::run(&socket, autodiscover_rs::Method::Multicast("[ff0e::1]:1337".parse().unwrap()),|s| {
+                // change this to task::spawn if using async_std or tokio
+                // thread::spawn(move || handle_introduction(s, known_hosts_discover));
+            // }).unwrap();
+            autodiscover_rs::run(&socket, autodiscover_rs::Method::Multicast("[ff0e::1]:1337".parse().unwrap()),|s| {
+                let known_hosts = Arc::clone(&known_hosts_discover);
+                handle_introduction(s, known_hosts)}).unwrap();});
+
+        // Once it has introduced itslef it needs to stop multicasting!! A the moment it continually multicasts
 
         // Client thread, running client behaviour
         thread::spawn(move || {
@@ -76,12 +99,13 @@ impl PeerToPeer {
             let stream = stream.unwrap();
             let known_hosts_server = Arc::clone(&known_hosts); // This might cause a big overhead? Maybe make known hosts static?
             pool.execute(move || {
-                let peer_address = stream.peer_addr().unwrap().ip();
+                let peer_address = stream.peer_addr().unwrap();
                 println!("\tNew connection from: {}", peer_address);
                 // handler(stream); //TODO: This needs to be made dynamic, depending on the route (means I also need to define some sort of stream request format)
                 let mut codec = LineCodec::new(stream).unwrap();
                 let message = codec.read_message().unwrap();
                 let mut reply = String::new();
+                println!("{}", message);
                 if message == "/known_hosts" {
                     for host in known_hosts_server.try_lock().unwrap().iter() {
                         reply.push_str(host.to_string().as_str());
@@ -152,5 +176,17 @@ impl PeerToPeer {
 
         // call the appropriate behaviour and pass remaining part of message based on the uri
         // self.server.routes.get(uri).unwrap()(stream);
+    }
+
+
+}
+
+fn handle_introduction(stream: std::io::Result<TcpStream>, known_hosts: Arc<Mutex<Vec<SocketAddr>>>) {
+    let peer_address = stream.unwrap().peer_addr().unwrap();
+    println!("Got a reply from {}", peer_address);
+    // add him to my known hosts and ask hi who he knows
+    let mut lock = known_hosts.try_lock().unwrap();
+    if !lock.contains(&peer_address) {
+        lock.push(peer_address);
     }
 }
