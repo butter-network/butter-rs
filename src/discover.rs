@@ -1,8 +1,17 @@
+// use log::{trace, warn};
 use socket2::{Domain, Socket, Type};
 use std::convert::TryInto;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
-use std::thread;
-use autodiscover_rs;
+
+/// Method describes whether a multicast or broadcast method for sending discovery messages should be used.
+pub enum Method {
+    /// Broadcast is an IPv4-only method of sending discovery messages; use a value such as `"255.255.255.255:1337".parse()` or
+    /// `"192.168.0.255:1337".parse()` when using this method. The latter value will be specific to your network setup.
+    Broadcast(SocketAddr),
+    /// Multicast supports both IPv6 and IPv4 for sending discovery methods; use a value such as `"224.0.0.1".parse()` for IPv4, or
+    /// `"[ff0e::1]:1337".parse()` for IPv6. To be frank, IPv6 confuses me, but that address worked on my machine.
+    Multicast(SocketAddr),
+}
 
 fn handle_broadcast_message<F: Fn(std::io::Result<TcpStream>)>(
     socket: UdpSocket,
@@ -61,4 +70,50 @@ fn to_bytes(connect_to: &SocketAddr) -> Vec<u8> {
             buff
         }
     }
+}
+
+/// run will block forever. It sends a notification using the configured method, then listens for other notifications and begins
+/// connecting to them, calling spawn_callback (which should return right away!) with the connected streams. The connect_to address
+/// should be a socket we have already bind'ed too, since we advertise that to other autodiscovery clients.
+pub fn run<F: Fn(std::io::Result<TcpStream>)>(
+    connect_to: &SocketAddr,
+    method: Method,
+    spawn_callback: F,
+) -> std::io::Result<()> {
+    match method {
+        Method::Broadcast(addr) => {
+            let socket = Socket::new(Domain::ipv4(), Type::dgram(), None)?;
+            socket.set_reuse_address(true)?;
+            socket.set_broadcast(true)?;
+            socket.bind(&addr.into())?;
+            let socket: UdpSocket = socket.into_udp_socket();
+            let result = socket.send_to(&to_bytes(connect_to), addr)?;
+            // trace!("sent {} byte announcement to {:?}", result, addr);
+            handle_broadcast_message(socket, connect_to, &spawn_callback)?;
+        }
+        Method::Multicast(addr) => {
+            let socket = Socket::new(Domain::ipv6(), Type::dgram(), None)?;
+            socket.set_reuse_address(true)?;
+            socket.bind(&addr.into())?;
+            let socket: UdpSocket = socket.into_udp_socket();
+            match addr.ip() {
+                IpAddr::V4(addr) => {
+                    let iface: Ipv4Addr = 0u32.into();
+                    socket.join_multicast_v4(&addr, &iface)?;
+                }
+                IpAddr::V6(addr) => {
+                    socket.join_multicast_v6(&addr, 0)?;
+                }
+            }
+            // we need a different, temporary socket, to send multicast in IPv6
+            {
+                let socket = UdpSocket::bind(":::0")?;
+                let result = socket.send_to(&to_bytes(connect_to), addr)?;
+                // trace!("sent {} byte announcement to {:?}", result, addr);
+            }
+            handle_broadcast_message(socket, connect_to, &spawn_callback)?;
+        }
+    }
+    // warn!("It looks like I stopped listening; this shouldn't happen.");
+    Ok(())
 }

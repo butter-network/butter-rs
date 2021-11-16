@@ -3,22 +3,11 @@
 version = 3
 
 [[package]]
-name = "autodiscover-rs"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f37759ef22aa6d3e31a4a5900406319f6dbfb22d336d1b6442eec99eec90e292"
-dependencies = [
- "log",
- "socket2 0.3.19",
-]
-
-[[package]]
 name = "butter"
 version = "0.1.0"
 dependencies = [
- "autodiscover-rs",
  "local-ip-address",
- "socket2 0.4.2",
+ "socket2",
 ]
 
 [[package]]
@@ -56,15 +45,6 @@ dependencies = [
  "neli",
  "thiserror",
  "windows",
-]
-
-[[package]]
-name = "log"
-version = "0.4.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51b9bbe6c47d51fc3e1a9b945965946b4c44142ab8792c50835a980d362c2710"
-dependencies = [
- "cfg-if",
 ]
 
 [[package]]
@@ -108,16 +88,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "122e570113d28d773067fab24266b66753f6ea915758651696b6e35e49f88d6e"
 dependencies = [
  "cfg-if",
- "libc",
- "winapi",
-]
-
-[[package]]
-name = "socket2"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dc90fe6c7be1a323296982db1836d1ea9e47b6839496dde9a541bc496df3516"
-dependencies = [
  "libc",
  "winapi",
 ]

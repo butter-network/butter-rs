@@ -10,9 +10,25 @@ use std::sync::{Arc, Mutex};
 use crate::line_codec::LineCodec;
 
 use crate::discover;
-use autodiscover_rs;
+// use autodiscover_rs;
 
+// EPICS
+// - Implement a peer on the network (TCP sender/recipient)
+// - Implement peer discovery mechanisms
+//    - LAN dicovery using UDP multicast
+//    - WAN disovery using NAT UPNP
+// - ? implement dht?
 
+//TODO: 1. Move discovery to be handled internally
+//TODO: 2. Fix error when other node sends message
+//TODO: 3. Stop calling out to the network when the node is not connected
+
+// NAT IDEA - https://docs.libp2p.io/concepts/nat/
+// The network would look like a collection of subnetworks with no interconnections.
+// This is why we need NAT
+// Router IP acts as the IP for the entire network - the difficult thing is determining what node on the local network needs to process the responce
+// The solution to that is port forwarding i.e. assign a port of the router to point to a specific peer on the local network
+// This can be configure in an automated way by using upnp.
 
 
 pub struct PeerToPeer {
@@ -75,20 +91,20 @@ impl PeerToPeer {
         // before I start the data layer of the p2p network TCP, I need to go through the start up
         // procedure to make at least one connection to the network
         let socket = listener.local_addr().unwrap();
-        thread::spawn(move || {
+        thread::Builder::new().name("introduction_layer_caster".to_string()).spawn(move || { // this probably doesn't need to be in a thread cause i need to wait for a response before i can work with the data layer anyways
             // this function blocks forever; running it a seperate thread
             // autodiscover_rs::run(&socket, autodiscover_rs::Method::Multicast("[ff0e::1]:1337".parse().unwrap()),|s| {
                 // change this to task::spawn if using async_std or tokio
                 // thread::spawn(move || handle_introduction(s, known_hosts_discover));
             // }).unwrap();
-            autodiscover_rs::run(&socket, autodiscover_rs::Method::Multicast("[ff0e::1]:1337".parse().unwrap()),|s| {
+            discover::run(&socket, discover::Method::Multicast("[ff0e::1]:1337".parse().unwrap()),|s| {
                 let known_hosts = Arc::clone(&known_hosts_discover);
                 handle_introduction(s, known_hosts)}).unwrap();});
 
         // Once it has introduced itslef it needs to stop multicasting!! A the moment it continually multicasts
 
         // Client thread, running client behaviour
-        thread::spawn(move || {
+        thread::Builder::new().name("conversation_layer_talker".to_string()).spawn(move || {
             // Allow the server to startup before client tries to connect
             thread::sleep(Duration::from_secs(2));
             (client_behaviour)(known_hosts_client);
@@ -99,6 +115,8 @@ impl PeerToPeer {
             let stream = stream.unwrap();
             let known_hosts_server = Arc::clone(&known_hosts); // This might cause a big overhead? Maybe make known hosts static?
             pool.execute(move || {
+                // PROBLEM: the UDP multicast caller is being added to the known hosts but it should
+                // not be! Instead we need to add the TCP soccer of the calling node not it's caller UDP.
                 let peer_address = stream.peer_addr().unwrap();
                 println!("\tNew connection from: {}", peer_address);
                 // handler(stream); //TODO: This needs to be made dynamic, depending on the route (means I also need to define some sort of stream request format)
@@ -111,14 +129,19 @@ impl PeerToPeer {
                         reply.push_str(host.to_string().as_str());
                         reply.push_str(",");
                     }
+                } else if message == ""  { // at the moment the UDP call just sends an empty message so this is a hack to not add the udp caller to the known host list
+                    // do nothing - don't add UDP server to list - later customise the message to be a specific route
+                    println!("I'm here")
                 } else {
                     reply = (server_behaviour)(message);
+                    let mut lock = known_hosts_server.try_lock().unwrap();
+                    if !lock.contains(&peer_address) {
+                        lock.push(peer_address);
+                    }
                 }
-                codec.send_message(reply.as_str()).unwrap();
                 let mut lock = known_hosts_server.try_lock().unwrap();
-                if !lock.contains(&peer_address) {
-                    lock.push(peer_address);
-                }
+                println!("{}", lock.len());
+                codec.send_message(reply.as_str()).unwrap();
             });
         }
     }
