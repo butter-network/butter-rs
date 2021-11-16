@@ -97,7 +97,7 @@ impl PeerToPeer {
                 // change this to task::spawn if using async_std or tokio
                 // thread::spawn(move || handle_introduction(s, known_hosts_discover));
             // }).unwrap();
-            discover::run(&socket, discover::Method::Multicast("[ff0e::1]:1337".parse().unwrap()),|s| {
+            discover::run(&socket, |s| {
                 let known_hosts = Arc::clone(&known_hosts_discover);
                 handle_introduction(s, known_hosts)}).unwrap();});
 
