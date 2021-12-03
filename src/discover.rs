@@ -1,16 +1,32 @@
+// Ref: https://github.com/over-codes/autodiscover-rs
+
 // use log::{trace, warn};
 use socket2::{Domain, Socket, Type};
 use std::convert::TryInto;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
+//TODO: modify handle_broadcast_message to not last forever - just loop until you have found a peer - then stop thread
+
+// Seems to be the solution to the blocking problem https://play.rust-lang.org/?gist=a660f98aa692072160700b74d2f2e264&version=stable
 fn handle_broadcast_message<F: Fn(std::io::Result<TcpStream>)>(
     socket: UdpSocket,
     my_socket: &SocketAddr,
     callback: &F,
+    state: Arc<AtomicUsize>,
 ) -> std::io::Result<()> {
     let mut buff = vec![0; 18];
+    socket.set_nonblocking(true);
     loop {
-        let (bytes, _) = socket.recv_from(&mut buff)?;
+        // println!("{}", state.load(Ordering::Relaxed));
+        // if state.load(Ordering::Relaxed) == 1 {
+        //     break;
+        // }
+        println!("test");
+        let (bytes, _) = socket.recv_from(&mut buff)?; // this waits till it receives a datagram - it blocks
         if let Ok(socket) = parse_bytes(bytes, &buff) {
             if socket == *my_socket {
                 // trace!("saw connection attempt from myself, this should happen once");
@@ -18,8 +34,10 @@ fn handle_broadcast_message<F: Fn(std::io::Result<TcpStream>)>(
             }
             let stream = TcpStream::connect(socket);
             callback(stream);
+            break; // if we get here, we have connected to a peer, we can break out of loop
         }
     }
+    Ok(())
 }
 
 fn parse_bytes(len: usize, buff: &[u8]) -> Result<SocketAddr, ()> {
@@ -68,6 +86,7 @@ fn to_bytes(connect_to: &SocketAddr) -> Vec<u8> {
 pub fn run<F: Fn(std::io::Result<TcpStream>)>(
     connect_to: &SocketAddr,
     spawn_callback: F,
+    state: Arc<AtomicUsize>
 ) -> std::io::Result<()> {
     let addr: SocketAddr = "[ff0e::1]:1337".parse().unwrap();
     let socket = Socket::new(Domain::ipv6(), Type::dgram(), None)?;
@@ -89,7 +108,7 @@ pub fn run<F: Fn(std::io::Result<TcpStream>)>(
         let result = socket.send_to(&to_bytes(connect_to), addr)?;
         // trace!("sent {} byte announcement to {:?}", result, addr);
     }
-    handle_broadcast_message(socket, connect_to, &spawn_callback)?;
+    handle_broadcast_message(socket, connect_to, &spawn_callback, state);
     // warn!("It looks like I stopped listening; this shouldn't happen.");
     Ok(())
 }

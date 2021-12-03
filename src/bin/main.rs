@@ -5,10 +5,10 @@ use std::thread;
 use std::time;
 
 use butter::line_codec::LineCodec;
-use butter::peer_to_peer::{PeerToPeer};
+use butter::peer_to_peer::{PeerToPeerNode};
 use butter::peer_to_peer;
 use std::io::Error;
-use local_ip_address::local_ip;
+// use local_ip_address::local_ip;
 
 // use autodiscover_rs::{Method};
 
@@ -46,6 +46,6 @@ fn client_behaviour(known_hosts: Arc<Mutex<Vec<SocketAddr>>>) {
 
 
 fn main() {
-    let p2p: PeerToPeer = PeerToPeer::new(8376, server_behaviour, client_behaviour);
+    let p2p: PeerToPeerNode = PeerToPeerNode::new(8376, server_behaviour, client_behaviour);
     p2p.start();
 }
