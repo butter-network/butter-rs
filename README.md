@@ -3,7 +3,7 @@
 
 Butter is a platform/library that supports the development of efficient decentralised applications.
 
-[![compile_deploy_latex](https://github.com/a-shine/compile_deploy_latex/actions/workflows/compile_deploy_latex.yml/badge.svg)](https://github.com/a-shine/butter/actions)
+![compile_deploy_latex](https://github.com/a-shine/butter/actions/workflows/compile_deploy_latex.yml/badge.svg)
 
 ## Brief project overview
 
