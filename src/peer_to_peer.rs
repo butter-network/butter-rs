@@ -158,42 +158,11 @@ impl PeerToPeer {
         }
     }
 
-    // Upon initialising the peer, introduce yourself to the network to avoid cold start problem
-    // fn introduce_yourself_naive() {
-    //     // generate random ip address and ask for known hosts
-    //     // How long will it take to get a hit?
-    //     loop {
-    //         let rand_ip = IpAddr::V4(Ipv4Addr::new(rand::thread_rng().gen_range(0..255),
-    //                                                rand::thread_rng().gen_range(0..255),
-    //                                                rand::thread_rng().gen_range(0..255),
-    //                                                rand::thread_rng().gen_range(0..255)));
-    //         let address = rand_ip.to_string() + ":0";
-    //         // try to connect to that IP address
-    //         let stream = TcpStream::connect(address);
-    //         match stream {
-    //             Ok(stream) => {
-    //                 // println!("\tConnected to: {}", address);
-    //                 let mut codec = LineCodec::new(stream).unwrap();
-    //                 codec.send_message("/known_host").unwrap();
-    //                 println!("{}", codec.read_message().unwrap());
-    //                 break;
-    //             }
-    //             Err(_) => {
-    //                 // do nothing and loop
-    //             }
-    //         }
-    //     }
-    // }
 
     // In UDP, the client does not form a connection with the server like in TCP and instead just
     // sends a datagram. Similarly, the server need not accept a connection and just waits for
     // datagrams to arrive. Datagrams upon arrival contain the address of sender which the server
     // uses to send data to the correct client.
-
-    // If I have multiple UDP listeners i.e. servers, will they all respond when 1 client makes a call? Or is it just a single packet that gets intercepted by a server and then destroyed
-    fn introduce_yourself_by_shouting() {
-        // let socket = UdpSocket::send();
-    }
 
     pub fn register_server_route(&mut self, route: String, behaviour: fn(TcpStream) -> ()) {
         self.server.register_routes(route, behaviour);
