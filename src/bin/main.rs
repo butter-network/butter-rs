@@ -11,6 +11,9 @@ use std::io::Error;
 // use local_ip_address::local_ip;
 
 // use autodiscover_rs::{Method};
+use kademlia_dht::node::Node;
+use kademlia_dht::protocol::Protocol;
+use kademlia_dht::utils;
 
 // TODO: Look at next videos (object + blockchain videos)
 // TODO: Test using local machine and docker container with their respective IP addressed (not the loopback address)
@@ -48,4 +51,15 @@ fn client_behaviour(known_hosts: Arc<Mutex<Vec<SocketAddr>>>) {
 fn main() {
     let p2p: PeerToPeerNode = PeerToPeerNode::new(8376, server_behaviour, client_behaviour);
     p2p.start();
+    // let node0 = Node::new(utils::get_local_ip().unwrap(), 1337);
+    // let interface0 = Protocol::new(node0.ip.clone(), node0.port.clone(), None);
+
+    // let node1 = Node::new(utils::get_local_ip().unwrap(), 1338);
+    // let interface1 = Protocol::new(node1.ip.clone(), node1.port.clone(), Some(node0.clone()));
+
+    // interface0.put("some_key".to_owned(), "some_value".to_owned());
+
+    // let get_res = interface1.get("some_key".to_owned());
+
+    // println!("Extracted: {}", get_res.unwrap());
 }

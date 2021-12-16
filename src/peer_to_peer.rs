@@ -1,6 +1,8 @@
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::thread;
 use std::time::Duration;
+use kademlia_dht::protocol::{self, Protocol};
+
 // use rand::Rng;
 use crate::tcp_listener::Listener;
 use crate::threadpool::ThreadPool;
@@ -40,6 +42,7 @@ pub struct PeerToPeerNode {
     client_behaviour: fn(Arc<Mutex<Vec<SocketAddr>>>) -> (),
     known_hosts: Arc<Mutex<Vec<SocketAddr>>>,
     state: Arc<AtomicUsize>,
+    // protocol: Protocol, this is how I integrate the dht protocol to the peer to peer node object
 }
 
 impl PeerToPeerNode {
