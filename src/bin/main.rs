@@ -35,6 +35,7 @@ fn client_behaviour(known_hosts: Arc<Mutex<Vec<SocketAddr>>>) {
 
         for i in known_hosts_sto.iter() {
             // let address =  i.to_string() + ":8376";
+            println!("{}", i.to_string());
             let stream = TcpStream::connect(i).unwrap();
             let mut codec = LineCodec::new(stream).unwrap();
             codec.send_message(&input).unwrap();
