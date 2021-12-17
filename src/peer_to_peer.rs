@@ -3,8 +3,8 @@ use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 // use rand::Rng;
-use local_ip_address::local_ip;
-use crate::server::{TCPServer};
+// use local_ip_address::local_ip;
+use crate::tcp_listener::{Listener};
 use crate::threadpool::ThreadPool;
 
 use std::sync::{Arc, Mutex};
@@ -12,6 +12,7 @@ use crate::line_codec::LineCodec;
 
 use crate::discover;
 // use autodiscover_rs;
+use crate::utils;
 
 // EPICS
 // - Implement a peer on the network (TCP sender/recipient)
@@ -32,20 +33,20 @@ use crate::discover;
 // This can be configure in an automated way by using upnp.
 
 
-pub struct PeerToPeer {
+pub struct PeerToPeerNode {
     ip_address: IpAddr,
     port: u16,
-    server: TCPServer,
+    server: Listener,
     server_behaviour: fn(String) -> String,
     client_behaviour: fn(Arc<Mutex<Vec<SocketAddr>>>) -> (),
     known_hosts: Arc<Mutex<Vec<SocketAddr>>>,
 }
 
-impl PeerToPeer {
+impl PeerToPeerNode {
     pub fn new(port: u16, server_behaviour: fn(String) -> String,
-               client_behaviour: fn(Arc<Mutex<Vec<SocketAddr>>>) -> ()) -> PeerToPeer {
+               client_behaviour: fn(Arc<Mutex<Vec<SocketAddr>>>) -> ()) -> PeerToPeerNode {
 
-        let ip_address = local_ip().unwrap();
+        let ip_address = utils::get_local_ip().unwrap();
         // known_hosts - add itself?
         // let entrypoint = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         // known_hosts.lock().unwrap().push(entrypoint);
@@ -53,7 +54,7 @@ impl PeerToPeer {
         let known_hosts = Arc::new(Mutex::new(Vec::new()));
         // known_hosts.lock().unwrap().push(entrypoint);
 
-        let server: TCPServer = TCPServer::new(ip_address, 0);
+        let server: Listener = Listener::new(ip_address, 0);
         println!("TCP server address: {}", server.listener.local_addr().unwrap());
 
         // server.register_routes("/".parse().unwrap(), server_behaviour);
@@ -65,7 +66,7 @@ impl PeerToPeer {
 
         // println!("This is my local IP address: {:?}", ip_address);
 
-        PeerToPeer {
+        PeerToPeerNode {
             ip_address,
             port,
             server,
