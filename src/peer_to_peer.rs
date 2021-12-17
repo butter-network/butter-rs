@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 // use rand::Rng;
 // use local_ip_address::local_ip;
-use crate::tcp_listener::{Listener};
+use crate::server::{TcpServer};
 use crate::threadpool::ThreadPool;
 
 use std::sync::{Arc, Mutex};
@@ -36,7 +36,7 @@ use crate::utils;
 pub struct PeerToPeerNode {
     ip_address: IpAddr,
     port: u16,
-    server: Listener,
+    server: TcpServer,
     server_behaviour: fn(String) -> String,
     client_behaviour: fn(Arc<Mutex<Vec<SocketAddr>>>) -> (),
     known_hosts: Arc<Mutex<Vec<SocketAddr>>>,
@@ -54,7 +54,7 @@ impl PeerToPeerNode {
         let known_hosts = Arc::new(Mutex::new(Vec::new()));
         // known_hosts.lock().unwrap().push(entrypoint);
 
-        let server: Listener = Listener::new(ip_address, 0);
+        let server: TcpServer = TcpServer::new(ip_address, 0);
         println!("TCP server address: {}", server.listener.local_addr().unwrap());
 
         // server.register_routes("/".parse().unwrap(), server_behaviour);

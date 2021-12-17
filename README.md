@@ -49,6 +49,11 @@ It is worth noting that the library expects you to provide a port when instantia
 // ADD CODE HERE WHEN COMPLETE
 ```
 
+Run examples with the following command:
+```shell
+cargo run --example <example_name>
+```
+
 ## Working on the platform
 
 ### Developing

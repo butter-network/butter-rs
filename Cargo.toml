@@ -7,5 +7,4 @@ edition = "2018"
 
 [dependencies]
 socket2 = "0.3.12" # TODO: modify discover to remove this
-igd = "0.12.0"
-kademlia_dht = { git = "https://github.com/f0lg0/kademlia-dht" } # from online repo
+#igd = "0.12.0"
