@@ -147,6 +147,7 @@ impl PeerToPeerNode {
                     }
                 } else {
                     reply = (server_behaviour)(message);
+                    // reply = server_behaviour_trait(message);
                     // let mut lock = known_hosts_server.try_lock().unwrap();
                     // if !lock.contains(&peer_address) {
                     //     lock.push(peer_address); // this is pushing the socker address of generated clients not of the listener
@@ -183,6 +184,9 @@ impl PeerToPeerNode {
         // self.server.routes.get(uri).unwrap()(stream);
     }
 
+    pub fn server_behaviour_trait(message: String) -> String {
+        message
+    }
 
 }
 
