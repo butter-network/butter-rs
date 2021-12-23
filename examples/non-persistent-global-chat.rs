@@ -2,7 +2,6 @@
 
 use std::io::{stdin};
 use std::net::TcpStream;
-use std::sync::{Mutex, Arc};
 use butter::codec::LineCodec;
 use butter::peer::Node;
 
@@ -21,8 +20,8 @@ fn client_behaviour(node: Node) {
             .ok()
             .expect("Couldn't read line");
 
-        let mut lock = node.known_hosts.lock().unwrap();
-        let mut known_hosts_sto = lock.clone();
+        let lock = node.known_hosts.lock().unwrap();
+        let known_hosts_sto = lock.clone();
         drop(lock);
 
         for i in known_hosts_sto.iter() {

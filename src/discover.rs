@@ -4,8 +4,7 @@
 // use log::{trace, warn};
 use socket2::{Domain, Socket, Type};
 use std::convert::TryInto;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream, UdpSocket};
-use std::str::FromStr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
 
 fn handle_broadcast_message<F: Fn(std::io::Result<TcpStream>)>(
     socket: UdpSocket,
@@ -76,6 +75,7 @@ pub fn run<F: Fn(std::io::Result<TcpStream>)>(
     // let ip: Ipv6Addr = Ipv6Addr::from_str("[ff0e::1]").unwrap();
     // let port: u16 = 1337;
     let addr: SocketAddr = "[ff0e::1]:1337".parse().unwrap();
+    // let addr: SocketAddr = SocketAddr:
     let socket = Socket::new(Domain::ipv6(), Type::dgram(), None)?;
     socket.set_reuse_address(true)?;
     socket.bind(&addr.into())?;
@@ -94,7 +94,7 @@ pub fn run<F: Fn(std::io::Result<TcpStream>)>(
     // we need a different, temporary socket, to send multicast in IPv6
     {
         let socket = UdpSocket::bind(":::0")?;
-        let result = socket.send_to(&to_bytes(connect_to), addr)?;
+        let _result = socket.send_to(&to_bytes(connect_to), addr)?;
         // trace!("sent {} byte announcement to {:?}", result, addr);
     }
     handle_broadcast_message(socket, connect_to, &spawn_callback)?;

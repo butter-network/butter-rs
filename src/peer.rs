@@ -3,7 +3,6 @@ use std::sync::{Arc, Mutex};
 use std::str::FromStr;
 use std::thread;
 use sysinfo::{System, SystemExt};
-use std::mem;
 
 use crate::threadpool::ThreadPool;
 use crate::server::TcpServer;
@@ -30,14 +29,14 @@ impl Node {
         // started
         let port = port.unwrap_or(0);
 
-        // Determining appropriate known host list size
+        // TODO: Determining appropriate known hosts list size upper limit
         let mut sys = System::new();
         sys.refresh_all();
         // let known_host_allocation_size = mem::size_of::<SocketAddr>();
         // println!("{}", known_host_allocation_size);
         // let known_hosts: [SocketAddr; known_host_allocation_size as usize] = [];
 
-        // Create the list of known hosts to this node
+        // Create the list of known hosts for the node
         let known_hosts = Arc::new(Mutex::new(Vec::new()));
 
         if port == 0 {
@@ -58,71 +57,43 @@ impl Node {
     pub fn start(self, server_behaviour: fn(Node, String) -> String,
                  client_behaviour: fn(Node) -> ()) {
 
+        // Creating instance of server
         let server: TcpServer = TcpServer::new(self.ip_address, self.port);
         println!("Node will listen at: {}", server.listener.local_addr().unwrap());
 
+        // Creating thread-pool for the server to handle incoming connections
+        // TODO: Set the optimal size of the thread-pool automatically
+        // https://engineering.zalando.com/posts/2019/04/how-to-set-an-ideal-thread-pool-size.html
         let pool = ThreadPool::new(4);
 
-        // let known_hosts = self.known_hosts;
-        let known_hosts_client = Arc::clone(&self.known_hosts);
-        let known_hosts_discover = Arc::clone(&self.known_hosts);
-
-        let listener = server.listener;
-
-        // STARTUP PROCEDURE - multicast calling out
-        // before I start the data layer of the p2p network TCP, I need to go through the start up
-        // procedure to make at least one connection to the network
-        let socket = listener.local_addr().unwrap();
-        let server_address = (&listener.local_addr().unwrap()).clone();
-        thread::Builder::new().name("introduction_layer_caster".to_string()).spawn(move || { // this probably doesn't need to be in a thread cause i need to wait for a response before i can work with the data layer anyways
-            discover::run(&socket, |s| {
-                let known_hosts = Arc::clone(&known_hosts_discover);
-                handle_introduction(s, known_hosts, server_address)}).unwrap();
+        // --- STARTUP SEQUENCE THREAD ---
+        // Create a thread and multicast call to discover other nodes on the LAN
+        let server_addr = server.listener.local_addr().unwrap();
+        let server_addr_cp = (&server.listener.local_addr().unwrap()).clone();
+        let known_hosts_for_startup_thread = Arc::clone(&self.known_hosts);
+        thread::Builder::new().name("startup_sequence".to_string()).spawn(move || { // this probably doesn't need to be in a thread cause i need to wait for a response before i can work with the data layer anyways
+            discover::run(&server_addr, |s| {
+                let known_hosts = Arc::clone(&known_hosts_for_startup_thread);
+                handle_introduction(s, known_hosts, server_addr_cp);
+            }).unwrap();
         });
 
-        // Client thread, running client behaviour
+        // --- CLIENT THREAD ---
         let node_cp = self.clone();
-        thread::Builder::new().name("conversation_layer_talker".to_string()).spawn(move || {
+        thread::Builder::new().name("client_thread".to_string()).spawn(move || {
             (client_behaviour)(node_cp);
         });
 
-        // Server runs on main thread and handles connections in a threadpool
-        // let known_hosts_for_server = self.known_hosts;
-
-        for stream in listener.incoming() {
+        // --- SERVER THREAD (runs on the main thread) ---
+        // Listens for incoming connections on the main thread and handles connections in a
+        // thread-pool
+        for stream in server.listener.incoming() {
             let stream = stream.unwrap();
-            let known_hosts_server = Arc::clone(&self.known_hosts); // This might cause a big overhead? Maybe make known hosts static?
-            let node_cp_for_server = self.clone();
+            let node_cp = self.clone();
             pool.execute(move || {
-                let peer_address = stream.peer_addr().unwrap();
-                println!("\tNew connection from: {}", peer_address);
-                let mut codec = LineCodec::new(stream).unwrap();
-                let message = codec.read_message().unwrap();
-                let uri = message.split_whitespace().nth(0).unwrap();
-                let mut reply = String::new();
-                println!("{}", uri);
-                if message == "/known_hosts" {
-                    for host in known_hosts_server.try_lock().unwrap().iter() {
-                        reply.push_str(host.to_string().as_str());
-                        reply.push_str(",");
-                    }
-                } else if message == ""  { // at the moment the UDP call just sends an empty message so this is a hack to not add the udp caller to the known host list
-                    // do nothing - don't add UDP server to list - later customise the message to be a specific route
-                    println!("I'm here")
-                } else if uri == "/let_me_introduce_myself" {
-                    let remote_server_address = message.split_whitespace().nth(1).unwrap();
-                    println!("The other server is: {}", remote_server_address);
-                    let remote_server_address_sock = SocketAddr::from_str(remote_server_address).unwrap();
-                    let mut lock = known_hosts_server.try_lock().unwrap();
-                    if !lock.contains(&remote_server_address_sock) {
-                        lock.push(remote_server_address_sock); // this is pushing the socker address of generated clients not of the listener
-                    }
-                } else {
-                    reply = (server_behaviour)(node_cp_for_server, message);
-                }
-                let mut lock = known_hosts_server.try_lock().unwrap();
-                println!("{}", lock.len());
-                codec.send_message(reply.as_str()).unwrap();
+                let remote_addr = stream.peer_addr().unwrap();
+                println!("\tNew connection from: {}", remote_addr);
+                handle_incoming_connection(stream, server_behaviour, node_cp);
             });
         }
     }
@@ -144,22 +115,6 @@ impl Node {
     // sends a datagram. Similarly, the server need not accept a connection and just waits for
     // datagrams to arrive. Datagrams upon arrival contain the address of sender which the server
     // uses to send data to the correct client.
-
-
-
-    fn handler(&mut self, stream: TcpStream) {
-        // Initialise the coded interface
-        let mut codec = LineCodec::new(stream).unwrap();
-
-        // Read the message
-        let message = codec.read_message().unwrap();
-
-        // get the uri part of the message (which determines what we do with the rest)
-        let uri = message.split_whitespace().nth(1).unwrap();
-
-        // call the appropriate behaviour and pass remaining part of message based on the uri
-        // self.server.routes.get(uri).unwrap()(stream);
-    }
 }
 
 fn handle_introduction(stream: std::io::Result<TcpStream>, known_hosts: Arc<Mutex<Vec<SocketAddr>>>, server_address: SocketAddr) {
@@ -179,8 +134,48 @@ fn handle_introduction(stream: std::io::Result<TcpStream>, known_hosts: Arc<Mute
     codec.send_message(reply.as_str()).unwrap();
 }
 
+fn handle_incoming_connection(stream: TcpStream, server_behaviour: fn(Node, String) -> String, node: Node) {
+    // Create an instance of the codec and pass the stream to it
+    let mut codec = LineCodec::new(stream).unwrap();
 
-// Am I going to give the user the option to define routes?
-// pub fn register_server_route(&mut self, route: String, behaviour: fn(TcpStream) -> ()) {
-//     self.server.register_routes(route, behaviour);
-// }
+    // Get the data from the incoming stream
+    let data = codec.read_message().unwrap();
+
+    let mut reply = String::new();
+
+    if data.chars().nth(0).unwrap() == '/' {
+        // This is a package has a URI
+
+        // Separate the URI from the payload of the data packet
+        let uri = data.split_whitespace().nth(0).unwrap();
+        let start_of_payload_index = uri.len() + 1;
+        let _payload = &data[start_of_payload_index..];
+
+        match uri {
+            "/known_hosts" => {
+                let known_hosts = node.known_hosts.try_lock().unwrap();
+                for host in known_hosts.iter() {
+                    reply.push_str(host.to_string().as_str());
+                    reply.push_str(",");
+                }
+            },
+            "/let_me_introduce_myself" => {
+                let remote_server_address = data.split_whitespace().nth(1).unwrap();
+                println!("The other server is: {}", remote_server_address);
+                let remote_server_address_sock = SocketAddr::from_str(remote_server_address).unwrap();
+                let mut known_hosts = node.known_hosts.try_lock().unwrap();
+                if !known_hosts.contains(&remote_server_address_sock) {
+                    known_hosts.push(remote_server_address_sock); // this is pushing the socker address of generated clients not of the listener
+                }
+            },
+            _ => {
+                println!("Got an unknown URI from peer")
+            }
+        }
+    } else {
+        reply = server_behaviour(node, data);
+    }
+
+    // Send response back to the client
+    codec.send_message(reply.as_str()).unwrap();
+}
