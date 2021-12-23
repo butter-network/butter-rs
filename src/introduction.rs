@@ -7,6 +7,14 @@ use crate::threadpool::ThreadPool;
 use crate::utils;
 
 
+// NAT IDEA - https://docs.libp2p.io/concepts/nat/
+// The network would look like a collection of subnetworks with no interconnections.
+// This is why we need NAT
+// Router IP acts as the IP for the entire network - the difficult thing is determining what node on the local network needs to process the responce
+// The solution to that is port forwarding i.e. assign a port of the router to point to a specific peer on the local network
+// This can be configure in an automated way by using upnp.
+
+
 // This is a server (yes this is a server and as it is a listener but not a peer) that
 // has a queue of people that want to make friends and allows friends to be made across sub-networks
 // have this running on a cheap server e.g. aws/droplet - anyone can run an introduction server

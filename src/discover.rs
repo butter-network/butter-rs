@@ -1,8 +1,11 @@
+// Implementation modified from the following repository:
+// https://github.com/over-codes/autodiscover-rs
+
 // use log::{trace, warn};
 use socket2::{Domain, Socket, Type};
 use std::convert::TryInto;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
-use crate::utils;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream, UdpSocket};
+use std::str::FromStr;
 
 fn handle_broadcast_message<F: Fn(std::io::Result<TcpStream>)>(
     socket: UdpSocket,
@@ -70,11 +73,15 @@ pub fn run<F: Fn(std::io::Result<TcpStream>)>(
     connect_to: &SocketAddr,
     spawn_callback: F,
 ) -> std::io::Result<()> {
+    // let ip: Ipv6Addr = Ipv6Addr::from_str("[ff0e::1]").unwrap();
+    // let port: u16 = 1337;
     let addr: SocketAddr = "[ff0e::1]:1337".parse().unwrap();
     let socket = Socket::new(Domain::ipv6(), Type::dgram(), None)?;
     socket.set_reuse_address(true)?;
     socket.bind(&addr.into())?;
     let socket: UdpSocket = socket.into_udp_socket();
+    // TODO: Remove the IPV4 option for autodiscover as this is only on LAN and we will always have IPV6 available
+    // (IPV6 has limited availability over the internet)
     match addr.ip() {
         IpAddr::V4(addr) => {
             let iface: Ipv4Addr = 0u32.into();

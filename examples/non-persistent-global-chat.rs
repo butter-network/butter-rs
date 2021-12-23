@@ -1,21 +1,16 @@
 // Network wide chat example.
 
 use std::io::{stdin};
-use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket, Ipv4Addr};
+use std::net::TcpStream;
 use std::sync::{Mutex, Arc};
-use std::thread;
-use std::time;
+use butter::codec::LineCodec;
+use butter::peer::Node;
 
-use butter::line_codec::LineCodec;
-use butter::peer_to_peer::{PeerToPeerNode};
-use butter::peer_to_peer;
-use std::io::Error;
-
-fn server_behaviour(message: String) -> String {
-    message.chars().rev().collect()
+fn server_behaviour(node: Node, incoming_message: String) -> String {
+    incoming_message.chars().rev().collect()
 }
 
-fn client_behaviour(known_hosts: Arc<Mutex<Vec<SocketAddr>>>) {
+fn client_behaviour(node: Node) {
     loop {
         println!("Send a message:");
 
@@ -26,7 +21,7 @@ fn client_behaviour(known_hosts: Arc<Mutex<Vec<SocketAddr>>>) {
             .ok()
             .expect("Couldn't read line");
 
-        let mut lock = known_hosts.lock().unwrap();
+        let mut lock = node.known_hosts.lock().unwrap();
         let mut known_hosts_sto = lock.clone();
         drop(lock);
 
@@ -51,9 +46,7 @@ fn client_behaviour(known_hosts: Arc<Mutex<Vec<SocketAddr>>>) {
     }
 }
 
-
-
 fn main() {
-    let p2p: PeerToPeerNode = PeerToPeerNode::new(8376, server_behaviour, client_behaviour);
-    p2p.start();
+    let node: Node = Node::new(None);
+    node.start(server_behaviour, client_behaviour);
 }

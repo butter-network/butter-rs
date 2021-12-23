@@ -1,7 +1,7 @@
-pub mod line_codec;
+pub mod codec;
 mod threadpool;
 mod server;
-pub mod peer_to_peer;
+pub mod peer;
 // mod introduction;
 mod discover;
 mod utils;
