@@ -2,10 +2,11 @@
 
 use std::io::{stdin};
 use std::sync::{Mutex, Arc};
+use std::thread::Builder;
 use butter::peer::Node;
 
 
-fn client_behaviour(node: Node) {
+fn store_behaviour(node: &Node) {
     loop {
         // To search for persistent information on the network you either:
         // - 'get' a specific piece of information (dns)
@@ -37,8 +38,8 @@ fn client_behaviour(node: Node) {
                     .read_line(&mut information_id)
                     .ok()
                     .expect("Couldn't read line");
-                search_result.push_str(&*node.naive_retrieve(information_id));
-                // search_result.push_str("This would be the requested information");
+                // search_result.push_str(p2p.search_get(information_id));
+                search_result.push_str("This would be the requested information");
             } else if search_type == "2\n" {
                 // 'query' for a list of potentially useful information (search engine)
                 println!("What is the query:");
@@ -55,13 +56,7 @@ fn client_behaviour(node: Node) {
             println!("{}", search_result);
         } else if interaction_type == "2\n" {
             // Add information
-            println!("What would you like to add:");
-            let mut information = String::new();
-            stdin()
-                .read_line(&mut information)
-                .ok()
-                .expect("Couldn't read line");
-            node.naive_store(information)
+            println!("This would be where you add information");
             // p2p.store_information();
         } else {
             println!("Invalid option");
@@ -69,7 +64,7 @@ fn client_behaviour(node: Node) {
     }
 }
 
-fn server_behaviour(node: Node, query: String) -> String {
+fn server_behaviour(node: &Node) {
     // Either store information or help search
 
     // Store
@@ -79,11 +74,35 @@ fn server_behaviour(node: Node, query: String) -> String {
     // Do I have the information in my storage?
     // self.storage
     // who can I route the request to to increase my chances of obtaining an answer
-    "do nothing".to_string()
+    todo!()
 }
 
+fn test_client_behaviour(node: Node) {
+    for uuid in node.storage.iter {
+        // start a timer
+        node.retrieve(uuid);
+        // stop timer
+    }
+}
 
-fn main() {
+#[test]
+fn retrieval_performance_tester() {
+    // Generate n nodes, put store infirmation in them and reord the uuid
+    let mut uuids = Vec::new();
+    for i in 0..10 {
+        let peer: Node = Node::new(None);
+        uuids.push(peer.store()) // some random information
+        Builder::new().name("node {}", i).spawn(move || {
+            peer.start(store_behaviour, server_behaviour);
+        })
+    }
+
     let peer: Node = Node::new(None);
-    peer.start(server_behaviour, client_behaviour);
+    peer.store(uuids); // might as well store them there
+    Builder::new().name("Test search node").spawn(move || {
+        peer.start(test_client_behaviour, server_behaviour);
+    })
+
+    // Add information to all the nodes (try add to each one), try and distribute it
+    // Time how long it takes on average to get each piece of information back
 }

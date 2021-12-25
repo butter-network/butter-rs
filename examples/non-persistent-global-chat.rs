@@ -5,6 +5,8 @@ use std::net::TcpStream;
 use butter::codec::LineCodec;
 use butter::peer::Node;
 
+// The server behaviour has access to the node, any incoming message and returns a string that will
+// be sent as the response
 fn server_behaviour(node: Node, incoming_message: String) -> String {
     incoming_message.chars().rev().collect()
 }

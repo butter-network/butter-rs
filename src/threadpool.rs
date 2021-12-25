@@ -44,6 +44,7 @@ impl ThreadPool {
     }
 }
 
+// A Worker Struct Responsible for Sending Code from the ThreadPool to a Thread
 struct Worker {
     id: usize,
     thread: thread::JoinHandle<()>,

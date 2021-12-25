@@ -1,9 +1,7 @@
-pub mod codec;
 mod threadpool;
 mod server;
-pub mod peer;
-// mod introduction;
 mod discover;
+// mod introducer;
 mod utils;
-pub mod p2ptest;
-// mod client;
+pub mod peer;
+pub mod codec;
